@@ -6,28 +6,23 @@
     <title>Upload Bukti TF - Sales</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    <!-- Firebase SDKs Updated -->
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
     <style>
-        /* Agar Canvas A4 Presisi saat Print */
         @page { size: A4; margin: 0; }
         @media print {
             body * { visibility: hidden; }
             #print-area, #print-area * { visibility: visible; }
             #print-area { position: absolute; left: 0; top: 0; width: 210mm; height: 297mm; }
             .no-print { display: none !important; }
-            .canvas-container { transform: scale(1) !important; }
         }
-        
-        /* Agar canvas responsive di HP tanpa merusak ukuran asli */
         #canvas-wrapper {
             width: 100%;
-            max-width: 794px; /* Resolusi A4 di 96 DPI */
+            max-width: 794px;
             margin: 0 auto;
         }
-        .canvas-container { margin: 0 auto; }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col">
@@ -36,28 +31,26 @@
     <div id="name-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
         <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm">
             <h2 class="text-xl font-bold mb-4 text-center text-gray-800">Masukkan Nama Anda</h2>
-            <input type="text" id="inputName" placeholder="Nama Sales" class="w-full px-4 py-2 border rounded-lg mb-4 focus:ring-2 focus:ring-blue-500">
-            <button onclick="startCanvas()" class="w-full bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700">Mulai Upload</button>
+            <input type="text" id="inputName" placeholder="Nama Sales" class="w-full px-4 py-2 border rounded-lg mb-4">
+            <button onclick="startCanvas()" class="w-full bg-blue-600 text-white font-bold py-2 rounded-lg">Mulai Upload</button>
         </div>
     </div>
 
-    <!-- Area Kerja Canvas -->
+    <!-- Area Kerja -->
     <div class="flex-1 flex flex-col">
-        <!-- Header & Kontrol -->
         <div class="no-print bg-white shadow p-3 flex justify-between items-center sticky top-0 z-40">
             <div>
                 <h1 id="headerName" class="font-bold text-gray-800 text-lg"></h1>
                 <p id="headerDate" class="text-xs text-gray-500"></p>
             </div>
             <div class="flex gap-2">
-                <label class="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-lg cursor-pointer font-bold text-sm flex items-center">
+                <label id="addBtnLabel" class="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-lg cursor-pointer font-bold text-sm flex items-center">
                     + <input type="file" id="addImage" accept="image/*" capture="environment" class="hidden">
                 </label>
-                <button onclick="saveToFirebase()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-bold text-sm">Simpan</button>
+                <button onclick="saveToFirebase()" id="saveBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-bold text-sm">Simpan</button>
             </div>
         </div>
 
-        <!-- Canvas Container -->
         <div id="print-area" class="flex-1 bg-gray-300 flex items-start justify-center p-2 overflow-auto">
             <div id="canvas-wrapper">
                 <canvas id="a4-canvas"></canvas>
@@ -66,21 +59,18 @@
     </div>
 
     <script>
-        // === PASTE KONFIGURASI FIREBASE ANDA DI BAWAH INI ===
         const firebaseConfig = {
-  apiKey: "AIzaSyDlNjmLa_b5RozsQnSVkWcOOnbBs40zVCA",
-  authDomain: "bukti-tf-app.firebaseapp.com",
-  projectId: "bukti-tf-app",
-  storageBucket: "bukti-tf-app.firebasestorage.app",
-  messagingSenderId: "559933904102",
-  appId: "1:559933904102:web:42ca8db094c71969095727"
-};
-        // ====================================================
+            apiKey: "AIzaSyDlNjmLa_b5RozsQnSVkWcOOnbBs40zVCA",
+            authDomain: "bukti-tf-app.firebaseapp.com",
+            projectId: "bukti-tf-app",
+            storageBucket: "bukti-tf-app.firebasestorage.app",
+            messagingSenderId: "559933904102",
+            appId: "1:559933904102:web:42ca8db094c71969095727"
+        };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const storage = firebase.storage();
 
-        // Setup A4 Canvas (Ukuran Asli A4 794x1123 px @96dpi)
         let canvas;
         let salesName = "";
         let salesDate = "";
@@ -101,94 +91,73 @@
                 backgroundColor: 'white'
             });
 
-            // Tambahkan Judul Nama & Tanggal di dalam canvas agar ikut terprint
             const titleText = new fabric.IText(`Sales: ${salesName}\nTanggal: ${salesDate}`, {
-                left: 40,
-                top: 40,
-                fontFamily: 'Arial',
-                fontSize: 24,
-                fill: 'black',
-                editable: false,
-                selectable: false
+                left: 40, top: 40, fontFamily: 'Arial', fontSize: 24, fill: 'black', editable: false, selectable: false
             });
             canvas.add(titleText);
 
-            // Responsive Canvas di Mobile
             resizeCanvas();
             window.addEventListener('resize', resizeCanvas);
         }
 
         function resizeCanvas() {
+            if(!canvas) return;
             const wrapperWidth = document.getElementById('canvas-wrapper').clientWidth;
             const scale = wrapperWidth / 794;
-            const zoom = canvas.getZoom();
-            
-            // Visual scaling pakai CSS transform
             document.querySelector('.canvas-container').style.transform = `scale(${scale})`;
             document.querySelector('.canvas-container').style.transformOrigin = 'top left';
             document.getElementById('canvas-wrapper').style.height = `${1123 * scale}px`;
         }
 
-        // Tambah Gambar ke Canvas
-        document.getElementById('addImage').addEventListener('change', function(e) {
+        // PERBAIKAN: Upload gambar langsung ke Firebase Storage saat dipilih
+        document.getElementById('addImage').addEventListener('change', async function(e) {
             const file = e.target.files[0];
             if (!file) return;
+            e.target.value = ''; // Reset input
 
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                fabric.Image.fromURL(event.target.result, function(img) {
-                    // Resize gambar agar tidak terlalu besar di canvas (max lebar 500px)
-                    if (img.width > 500) {
-                        img.scaleToWidth(500);
-                    }
-                    
-                    // Posisi random/tengah
-                    img.set({
-                        left: 150,
-                        top: 150,
-                        cornerColor: 'blue',
-                        cornerSize: 15,
-                        transparentCorners: false
-                    });
+            // Ubah tombol jadi loading
+            const btnLabel = document.getElementById('addBtnLabel');
+            const originalText = btnLabel.innerHTML;
+            btnLabel.innerHTML = `⏳ Upload...`;
+            btnLabel.style.pointerEvents = 'none';
 
+            try {
+                // 1. Upload gambar asli ke Firebase Storage
+                const storageRef = storage.ref(`bukti_tf/${salesName}_${Date.now()}.jpg`);
+                const snapshot = await storageRef.put(file);
+                const url = await snapshot.ref.getDownloadURL();
+
+                // 2. Masukkan URL Firebase ke Canvas Fabric.js
+                fabric.Image.fromURL(url, function(img) {
+                    if (img.width > 500) img.scaleToWidth(500);
+                    img.set({ left: 100, top: 150, cornerColor: 'blue', cornerSize: 15, transparentCorners: false });
                     canvas.add(img);
                     canvas.setActiveObject(img);
-                });
-            };
-            reader.readAsDataURL(file);
-            e.target.value = ''; // Reset input
+                }, { crossOrigin: 'anonymous' });
+
+            } catch (error) {
+                alert("Gagal upload gambar: " + error.message);
+                console.error(error);
+            } finally {
+                // Kembalikan tombol ke semula
+                btnLabel.innerHTML = originalText;
+                btnLabel.style.pointerEvents = 'auto';
+            }
         });
 
-        // Simpan ke Firebase
+        // PERBAIKAN: Simpan hanya data posisi ke Firestore (URL gambar sudah ada di Storage)
         async function saveToFirebase() {
             if(!canvas) return;
-            
             const objects = canvas.getObjects();
-            let imageProcessed = 0;
-            let totalImages = objects.filter(obj => obj.type === 'image').length;
+            const hasImage = objects.some(obj => obj.type === 'image');
+            if(!hasImage) return alert("Belum ada gambar ditambahkan!");
 
-            if(totalImages === 0) return alert("Belum ada gambar ditambahkan!");
+            const saveBtn = document.getElementById('saveBtn');
+            saveBtn.innerText = "Menyimpan...";
+            saveBtn.disabled = true;
 
-            // Upload semua gambar ke Storage, lalu ganti src di JSON dengan URL Firebase
-            const jsonCanvas = canvas.toJSON();
-            
-            for (let i = 0; i < jsonCanvas.objects.length; i++) {
-                let obj = jsonCanvas.objects[i];
-                if (obj.type === 'image' && obj.src.startsWith('data:')) {
-                    try {
-                        const blob = dataURItoBlob(obj.src);
-                        const ref = storage.ref(`bukti_tf/${salesName}_${Date.now()}_${i}.jpg`);
-                        const snapshot = await ref.put(blob);
-                        const url = await snapshot.ref.getDownloadURL();
-                        obj.src = url; // Ganti Base64 jadi URL Firebase
-                    } catch (e) {
-                        console.error("Gagal upload gambar", e);
-                    }
-                }
-            }
-
-            // Simpan JSON Canvas ke Firestore
             try {
+                const jsonCanvas = canvas.toJSON(); // Ini tidak akan berisi base64 yang bikin berat
                 await db.collection('canvases').add({
                     salesName: salesName,
                     date: salesDate,
@@ -198,20 +167,11 @@
                 alert("Berhasil Disimpan!");
                 window.location.reload();
             } catch (e) {
-                alert("Gagal menyimpan ke database: " + e.message);
+                alert("Gagal menyimpan: " + e.message);
+                console.error(e);
+                saveBtn.innerText = "Simpan";
+                saveBtn.disabled = false;
             }
-        }
-
-        // Helper: Convert Base64 to Blob
-        function dataURItoBlob(dataURI) {
-            var byteString = atob(dataURI.split(',')[1]);
-            var mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
-            var ab = new ArrayBuffer(byteString.length);
-            var ia = new Uint8Array(ab);
-            for (var i = 0; i < byteString.length; i++) {
-                ia[i] = byteString.charCodeAt(i);
-            }
-            return new Blob([ab], {type: mimeString});
         }
     </script>
 </body>
