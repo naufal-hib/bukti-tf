@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Cetak Bukti TF</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    <style>
+        @page { size: A4; margin: 0; }
+        @media print {
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; }
+            #print-area { position: absolute; left: 0; top: 0; width: 210mm; height: 297mm; }
+            .no-print { display: none !important; }
+            .canvas-container { transform: scale(1) !important; }
+        }
+        #canvas-wrapper {
+            width: 100%;
+            max-width: 794px;
+            margin: 0 auto;
+        }
+        /* Visual cue ketika drag dari WA */
+        #canvas-wrapper.dragover {
+            border: 4px dashed blue !important;
+            background-color: rgba(0,0,255,0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+
+    <!-- Kontrol Admin -->
+    <div class="no-print bg-white shadow p-3 flex flex-col md:flex-row justify-between items-center gap-2 sticky top-0 z-40">
+        <select id="canvasList" class="border px-3 py-2 rounded-lg w-full md:w-1/2 focus:ring-2 focus:ring-blue-500">
+            <option value="">-- Pilih Data Sales --</option>
+        </select>
+        <div class="flex gap-2 w-full md:w-auto">
+            <label class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-lg cursor-pointer font-bold text-sm flex items-center">
+                + <input type="file" id="addImageAdmin" accept="image/*" class="hidden">
+            </label>
+            <button onclick="window.print()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex-1 md:flex-none">🖨️ Print A4</button>
+        </div>
+    </div>
+
+    <!-- Area Canvas -->
+    <div id="print-area" class="flex-1 bg-gray-300 flex items-start justify-center p-2 overflow-auto">
+        <div id="canvas-wrapper" class="relative bg-white shadow-lg border-2 border-dashed border-gray-400">
+            <canvas id="a4-canvas-admin"></canvas>
+            <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 pointer-events-none">
+                <p class="text-xl font-bold">Drop Gambar di Sini</p>
+                <p class="text-sm">(Dari WhatsApp Web langsung tarik ke sini)</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === PASTE KONFIGURASI FIREBASE ANDA DI BAWAH INI ===
+        const firebaseConfig = {
+  apiKey: "AIzaSyDlNjmLa_b5RozsQnSVkWcOOnbBs40zVCA",
+  authDomain: "bukti-tf-app.firebaseapp.com",
+  projectId: "bukti-tf-app",
+  storageBucket: "bukti-tf-app.firebasestorage.app",
+  messagingSenderId: "559933904102",
+  appId: "1:559933904102:web:42ca8db094c71969095727"
+};
+        // ====================================================
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+
+        let canvas;
+        let currentCanvasId = null;
+
+        // Init Canvas
+        canvas = new fabric.Canvas('a4-canvas-admin', {
+            width: 794,
+            height: 1123,
+            backgroundColor: 'white'
+        });
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        function resizeCanvas() {
+            const wrapperWidth = document.getElementById('canvas-wrapper').clientWidth;
+            const scale = wrapperWidth / 794;
+            document.querySelector('.canvas-container').style.transform = `scale(${scale})`;
+            document.querySelector('.canvas-container').style.transformOrigin = 'top left';
+            document.getElementById('canvas-wrapper').style.height = `${1123 * scale}px`;
+        }
+
+        // Load Data dari Firestore
+        const canvasListSel = document.getElementById('canvasList');
+        const emptyState = document.getElementById('empty-state');
+
+        db.collection('canvases').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
+            canvasListSel.innerHTML = '<option value="">-- Pilih Data Sales --</option>';
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const option = document.createElement('option');
+                option.value = doc.id;
+                option.innerText = `${data.salesName} - ${data.date}`;
+                canvasListSel.appendChild(option);
+            });
+        });
+
+        canvasListSel.addEventListener('change', async function() {
+            currentCanvasId = this.value;
+            if (!currentCanvasId) {
+                canvas.clear();
+                canvas.backgroundColor = 'white';
+                canvas.renderAll();
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            const doc = await db.collection('canvases').doc(currentCanvasId).get();
+            if (doc.exists) {
+                const jsonCanvas = doc.data().canvasJSON;
+                canvas.loadFromJSON(jsonCanvas, () => {
+                    canvas.renderAll();
+                    resizeCanvas(); // Re-render scaling
+                });
+            }
+        });
+
+        // Fungsi Tambah Gambar Manual (File Picker)
+        document.getElementById('addImageAdmin').addEventListener('change', function(e) {
+            addImageToCanvas(e.target.files[0]);
+            e.target.value = '';
+        });
+
+        function addImageToCanvas(file) {
+            if(!file) return;
+            emptyState.classList.add('hidden');
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                fabric.Image.fromURL(event.target.result, function(img) {
+                    if (img.width > 500) img.scaleToWidth(500);
+                    img.set({ left: 100, top: 100, cornerColor: 'blue', cornerSize: 15, transparentCorners: false });
+                    canvas.add(img);
+                    canvas.setActiveObject(img);
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // FITUR DRAG & DROP DARI WHATSAPP WEB / DESKTOP
+        const canvasWrapper = document.getElementById('canvas-wrapper');
+
+        canvasWrapper.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            canvasWrapper.classList.add('dragover');
+        });
+
+        canvasWrapper.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            canvasWrapper.classList.remove('dragover');
+        });
+
+        canvasWrapper.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            canvasWrapper.classList.remove('dragover');
+            
+            // Ambil file yang di-drop
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                addImageToCanvas(files[0]);
+            }
+            
+            // Jika yang di-drop adalah URL gambar dari web (kadang WA web pakai ini)
+            const html = e.dataTransfer.getData('text/html');
+            if(html) {
+                const regex = /src="([^"]+)"/;
+                const match = regex.exec(html);
+                if(match && match[1]) {
+                    fabric.Image.fromURL(match[1], function(img) {
+                        if (img.width > 500) img.scaleToWidth(500);
+                        img.set({ left: 100, top: 100, cornerColor: 'blue', cornerSize: 15, transparentCorners: false });
+                        canvas.add(img);
+                        canvas.setActiveObject(img);
+                    });
+                }
+            }
+        });
+
+    </script>
+</body>
+</html>
